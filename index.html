@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disease Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif; /* Added a common sans-serif font */
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+        
+        .result-card { /* Kept for potential future use, though current display is simpler */
+            transition: all 0.3s ease;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        /* Ensure Inter font is loaded if not available system-wide */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-bold text-indigo-800 mb-2">Disease Analytics</h1>
+            <p class="text-gray-600">Get incidence and market size data for any disease or health problem</p>
+        </header>
+        
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div id="inputArea" class="mb-8">
+                <label for="diseaseInput" class="block text-lg font-medium text-gray-700 mb-2">
+                    <i class="fas fa-disease text-indigo-500 mr-2"></i> Enter Disease or Health Problem
+                </label>
+                <div class="flex space-x-2">
+                    <input 
+                        type="text" 
+                        id="diseaseInput" 
+                        placeholder="e.g. Diabetes, Alzheimer's, Breast Cancer" 
+                        class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    >
+                    <button 
+                        id="searchButton" 
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center"
+                    >
+                        <i class="fas fa-search mr-2"></i> Analyze
+                    </button>
+                </div>
+                <div id="inputError" class="text-red-500 text-sm mt-1 hidden"></div>
+                <div class="mt-2 flex items-center text-sm text-gray-500">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    <span>Be as specific as possible for more accurate results</span>
+                </div>
+            </div>
+            
+            <div id="advancedOptionsArea" class="mb-6">
+                <div class="flex items-center justify-between cursor-pointer" id="advancedToggle">
+                    <h3 class="text-md font-medium text-gray-700">
+                        <i class="fas fa-sliders-h text-indigo-500 mr-2"></i> Advanced Options
+                    </h3>
+                    <i class="fas fa-chevron-down text-gray-500 transition-transform" id="advancedArrow"></i>
+                </div>
+                <div id="advancedContent" class="hidden mt-4 pl-2 border-l-4 border-indigo-100">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Region (UI Only)</label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                <option>Global</option>
+                                <option>North America</option>
+                                <option>Europe</option>
+                                <option>Asia</option>
+                                <option>Latin America</option>
+                                <option>Middle East & Africa</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Time Frame (UI Only)</label>
+                            <select class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                <option>Current</option>
+                                <option>5-year projection</option>
+                                <option>10-year projection</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="loadingState" class="hidden text-center py-8">
+                <div class="inline-block bg-indigo-50 p-6 rounded-full mb-4">
+                    <i class="fas fa-atom fa-spin text-indigo-600 text-3xl"></i>
+                </div>
+                <h3 class="text-lg font-medium text-gray-700 mb-1">Analyzing <span id="loadingDiseaseName" class="font-semibold text-indigo-600"></span></h3>
+                <p class="text-gray-500 loading-dots">Querying Gemini LLM</p>
+            </div>
+            
+            <div id="resultsSection" class="hidden fade-in">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                    <i class="fas fa-chart-line text-indigo-500 mr-3"></i> Analysis Results for <span id="resultsDiseaseName" class="text-indigo-600 ml-1"></span>
+                </h2>
+                
+                <div id="structuredResults" class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-3 mb-6">
+                    </div>
+                
+                <div id="rawResponseContainer" class="hidden bg-indigo-50 rounded-xl p-6 mb-6">
+                    <h3 class="text-lg font-semibold text-indigo-800 mb-3 flex items-center">
+                        <i class="fas fa-lightbulb text-indigo-600 mr-2"></i> Full Response from LLM
+                    </h3>
+                    <pre id="rawResponseContent" class="text-gray-700 whitespace-pre-wrap text-sm"></pre>
+                </div>
+                
+                <div class="mt-8 text-center">
+                    <button id="newSearchButton" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-6 py-2 rounded-lg font-medium transition">
+                        <i class="fas fa-redo mr-2"></i> Analyze Another Disease
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="text-center text-gray-500 text-sm">
+            <p>Powered by Gemini LLM • Data is for informational purposes only</p>
+            <p class="text-xs mt-1"><strong>Security Warning:</strong> API Key is embedded client-side. For production, use a backend proxy.</p>
+        </footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const diseaseInput = document.getElementById('diseaseInput');
+        const searchButton = document.getElementById('searchButton');
+        const inputError = document.getElementById('inputError');
+        
+        const inputArea = document.getElementById('inputArea');
+        const advancedOptionsArea = document.getElementById('advancedOptionsArea');
+
+        const loadingState = document.getElementById('loadingState');
+        const loadingDiseaseName = document.getElementById('loadingDiseaseName');
+        
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsDiseaseName = document.getElementById('resultsDiseaseName');
+        const structuredResultsDiv = document.getElementById('structuredResults');
+        const rawResponseContainer = document.getElementById('rawResponseContainer');
+        // const rawResponseContent = document.getElementById('rawResponseContent'); // Not strictly needed if container is always hidden
+
+        const newSearchButton = document.getElementById('newSearchButton');
+        
+        const advancedToggle = document.getElementById('advancedToggle');
+        const advancedContent = document.getElementById('advancedContent');
+        const advancedArrow = document.getElementById('advancedArrow');
+        
+        // Toggle advanced options
+        advancedToggle.addEventListener('click', () => {
+            advancedContent.classList.toggle('hidden');
+            advancedArrow.classList.toggle('rotate-180');
+            advancedArrow.classList.toggle('fa-chevron-down');
+            advancedArrow.classList.toggle('fa-chevron-up');
+        });
+
+        // Gemini API Configuration
+        const API_KEY = 'AIzaSyDJybl_Z4kq27Z4za6wJlaq9EudQQOz6lU'; // User-provided API key
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`; 
+
+        function parseGeminiResponse(rawText) {
+            const lines = rawText.split('\n').map(line => line.trim()).filter(line => line);
+            const parsedData = {
+                incidenceIndia: "Data not found or format mismatch.",
+                marketIndia: "Data not found or format mismatch.",
+                marketUS: "Data not found or format mismatch.",
+                marketEU: "Data not found or format mismatch.",
+                marketJapan: "Data not found or format mismatch.",
+                raw: rawText // Still store raw text in case it's needed for other logic, though not displayed
+            };
+
+            lines.forEach(line => {
+                const lowerLine = line.toLowerCase();
+                if (lowerLine.startsWith("incidence in india:")) {
+                    parsedData.incidenceIndia = line.substring("Incidence in India:".length).trim();
+                } else if (lowerLine.startsWith("market size in india:")) {
+                    parsedData.marketIndia = line.substring("Market Size in India:".length).trim();
+                } else if (lowerLine.startsWith("market size in us:")) {
+                    parsedData.marketUS = line.substring("Market Size in US:".length).trim();
+                } else if (lowerLine.startsWith("market size in eu:")) {
+                    parsedData.marketEU = line.substring("Market Size in EU:".length).trim();
+                } else if (lowerLine.startsWith("market size in japan:")) {
+                    parsedData.marketJapan = line.substring("Market Size in Japan:".length).trim();
+                }
+            });
+            return parsedData;
+        }
+
+        async function fetchDiseaseData(disease) {
+            const systemInstructionText = "You are a market analyst working in the healthcare sector.";
+            const userPromptText = `For the disease or health problem "${disease}", provide the following information:
+Incidence in India: [Provide the most recent available data on the number of new cases or incidence in India. If direct incidence data is not available, provide a ballpark number using available prevalence data and clearly label it as such, for example: "Incidence in India: Approx. X% (based on prevalence, ballpark figure)"]
+Market Size in India: [Provide the most recent available market size data in USD. If an exact figure is unavailable, provide a ballpark number and state "(Ballpark figure)" next to it, for example: "Market Size in India: Y USD (Ballpark figure)"]
+Market Size in US: [Provide the most recent available market size data in USD. If an exact figure is unavailable, provide a ballpark number and state "(Ballpark figure)" next to it, for example: "Market Size in US: Z USD (Ballpark figure)"]
+Market Size in EU: [Provide the most recent available market size data in USD. If an exact figure is unavailable, provide a ballpark number and state "(Ballpark figure)" next to it, for example: "Market Size in EU: A USD (Ballpark figure)"]
+Market Size in Japan: [Provide the most recent available market size data in USD. If an exact figure is unavailable, provide a ballpark number and state "(Ballpark figure)" next to it, for example: "Market Size in Japan: B USD (Ballpark figure)"]
+Please ensure the data is as current as possible and cite the year of the data if available.
+When providing a ballpark number, please explicitly state "(Ballpark figure)" or a similar clear indication next to the number.
+Ensure the output STRICTLY follows this format, with each item on a new line:
+Incidence in India:
+Market Size in India:
+Market Size in US:
+Market Size in EU:
+Market Size in Japan:`;
+
+            const requestBody = {
+                contents: [{ parts: [{ text: userPromptText }] }],
+                systemInstruction: { parts: [{ text: systemInstructionText }] },
+                generationConfig: {
+                    temperature: 0.3, 
+                    maxOutputTokens: 1024,
+                },
+                safetySettings: [
+                    { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+                    { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+                    { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+                    { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" }
+                ]
+            };
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({})); 
+                console.error('API Error Response (not ok):', errorData);
+                let errorMessage = `API request failed with status ${response.status} ${response.statusText}.`;
+                if (errorData.error && errorData.error.message) {
+                    errorMessage += ` Message: ${errorData.error.message}.`;
+                } else if (Object.keys(errorData).length > 0) {
+                    errorMessage += ` Details: ${JSON.stringify(errorData, null, 2)}.`;
+                }
+                errorMessage += ` This could be due to an invalid API key or an issue with the specified model name ('gemini-2.0-flash'). Please verify the model name and your access.`;
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            console.log("API Full Response (ok):", data); 
+
+            if (data.candidates && data.candidates.length > 0) {
+                const candidate = data.candidates[0];
+                if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0 && candidate.content.parts[0].text) {
+                    return parseGeminiResponse(candidate.content.parts[0].text);
+                } else if (candidate.finishReason) { 
+                    console.error("API call finished with reason:", candidate.finishReason, candidate);
+                    let reasonText = candidate.finishReason;
+                    if (candidate.safetyRatings) {
+                        reasonText += ` (Safety Ratings: ${JSON.stringify(candidate.safetyRatings)})`;
+                    }
+                    throw new Error(`API call completed with an issue. Finish reason: ${reasonText}. Check console for full candidate details. Please try a different query or simplify your request.`);
+                } else {
+                    console.error("Unexpected candidate structure:", candidate);
+                    throw new Error(`Failed to parse data from API candidate. Unexpected structure in candidate: ${JSON.stringify(candidate, null, 2)}`);
+                }
+            } else {
+                console.error("No candidates found in API response:", data);
+                throw new Error(`No candidates found in API response. Received: ${JSON.stringify(data, null, 2)}`);
+            }
+        }
+        
+        searchButton.addEventListener('click', async () => {
+            const disease = diseaseInput.value.trim();
+            
+            if (!disease) {
+                inputError.textContent = 'Please enter a disease or health problem.';
+                inputError.classList.remove('hidden');
+                return;
+            }
+            inputError.classList.add('hidden');
+            
+            inputArea.classList.add('hidden');
+            advancedOptionsArea.classList.add('hidden');
+            resultsSection.classList.add('hidden'); 
+            loadingDiseaseName.textContent = disease;
+            loadingState.classList.remove('hidden');
+            
+            try {
+                const parsedData = await fetchDiseaseData(disease);
+                
+                loadingState.classList.add('hidden');
+
+                if (parsedData) {
+                    resultsDiseaseName.textContent = disease;
+                    structuredResultsDiv.innerHTML = `
+                        <p><strong class="font-semibold text-gray-700">Incidence in India:</strong> <span class="text-gray-600">${parsedData.incidenceIndia}</span></p>
+                        <p><strong class="font-semibold text-gray-700">Market Size in India:</strong> <span class="text-gray-600">${parsedData.marketIndia}</span></p>
+                        <p><strong class="font-semibold text-gray-700">Market Size in US:</strong> <span class="text-gray-600">${parsedData.marketUS}</span></p>
+                        <p><strong class="font-semibold text-gray-700">Market Size in EU:</strong> <span class="text-gray-600">${parsedData.marketEU}</span></p>
+                        <p><strong class="font-semibold text-gray-700">Market Size in Japan:</strong> <span class="text-gray-600">${parsedData.marketJapan}</span></p>
+                    `;
+
+                    // Ensure rawResponseContainer remains hidden
+                    rawResponseContainer.classList.add('hidden');
+                    resultsSection.classList.remove('hidden');
+
+                } else {
+                    resultsDiseaseName.textContent = disease;
+                    structuredResultsDiv.innerHTML = `<p class="text-red-500 text-center">No data could be retrieved for "${disease}". The API response might have been empty or unparsable.</p>`;
+                    rawResponseContainer.classList.add('hidden'); // Ensure hidden here too
+                    resultsSection.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Error during search:", error);
+                loadingState.classList.add('hidden');
+                resultsDiseaseName.textContent = disease;
+                structuredResultsDiv.innerHTML = `<p class="text-red-600 text-center p-4 bg-red-50 rounded-md whitespace-pre-wrap"><strong>Error:</strong> ${error.message}</p>`;
+                rawResponseContainer.classList.add('hidden'); // Ensure hidden on error
+                resultsSection.classList.remove('hidden');
+            }
+        });
+        
+        newSearchButton.addEventListener('click', () => {
+            diseaseInput.value = '';
+            resultsSection.classList.add('hidden');
+            rawResponseContainer.classList.add('hidden'); 
+            structuredResultsDiv.innerHTML = ''; 
+
+            inputArea.classList.remove('hidden');
+            advancedOptionsArea.classList.remove('hidden');
+            
+            diseaseInput.focus();
+        });
+        
+        diseaseInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchButton.click();
+            }
+        });
+    </script>
+</body>
+</html>
